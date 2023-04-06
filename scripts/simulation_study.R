@@ -13,7 +13,7 @@ if (length(args) > 0){
   dgp_num <- as.integer(args[1])
   sample_size <- as.integer(args[2])
   num_variables <- as.integer(args[3])
-  signal_noise_ratio <- as.numeric(args[4])
+  kappa <- as.numeric(args[4])
   number_simulations <- as.integer(args[5])
   ate_true <- as.numeric(args[6])
   n_prop_submodels <- as.numeric(args[7])
@@ -32,7 +32,7 @@ if (length(args) > 0){
   dgp_num <- 1
   sample_size <- 500
   num_variables <- 50
-  signal_noise_ratio <- 2.
+  kappa <- 2.
   number_simulations <- 20
   ate_true <- 0.5
   n_prop_submodels <- 19
@@ -1003,13 +1003,13 @@ sim_results = foreach(i = 1:number_simulations, .combine = rbind) %dopar% {
         library("rpart", lib="~/local/R_libs")
     }
 
-    simulation_function(sample_size, num_variables, ate_true, dgp_num, signal_noise_ratio, n_prop_submodels, estimated_propensities, residualize_xbcf, project_pi_yhat, F)
+    simulation_function(sample_size, num_variables, ate_true, dgp_num, kappa, n_prop_submodels, estimated_propensities, residualize_xbcf, project_pi_yhat, F)
 }
 stopCluster(cl)
 
 # Save the results
 augmented_results <- data.frame(cbind(
-    dgp_num, sample_size, num_variables, signal_noise_ratio, ate_true, 
+    dgp_num, sample_size, num_variables, kappa, ate_true, 
     n_prop_submodels, estimated_propensities, residualize_xbcf, project_pi_yhat, 
     n_yhat_submodels, use_yhat_covariate, grf_default, sim_results
 ))
