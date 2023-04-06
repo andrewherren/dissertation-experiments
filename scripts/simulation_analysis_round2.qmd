@@ -1,0 +1,395 @@
+---
+title: "Experimental Causal Machine Learning Simulations"
+author: "Drew Herren"
+date: today
+format: pdf
+params:
+    datestamp: "202303280204"
+---
+
+# Overview
+
+The results live in a series of CSVs corresponding to individual runs on 
+different nodes of the cluster, so we import all of the CSVs, aggregate 
+them into a combined data frame, and estimate bias, variance and RMSE on the 
+grouped results. 
+[*The code to do all of the above is suppressed below in the interest of readability.*]
+
+# Summary of the experiment
+
+The results below are from an experiment date-stamped `r format(params$datestamp)`
+
+More details are available in the experiment log for this run.
+
+```{r, echo=FALSE, results='hide', warning=FALSE, error=FALSE, message=FALSE}
+# Load necessary libraries
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(here)
+library(xtable)
+
+# Define the datestamp of the output of interest
+datestamp <- params$datestamp
+
+# Capture the project directory using "here"
+project_dir = here()
+
+# Construct the folder path
+snapshot_folder = file.path(project_dir, "outputs", "snapshots", datestamp)
+
+# Get a list of all the output CSV files in the directory
+output_files <- list.files(snapshot_folder, full.names = T)
+
+# Append all of the CSV results into one big dataframe
+i <- 0
+lastthree <- function(x) substring(x, nchar(x)-2, nchar(x)+1)
+for (file in output_files){
+  if (lastthree(file) == "csv"){
+    temp_df <- read_csv(file)
+    if (i == 0){
+      combined_df <- temp_df
+    } else{
+      combined_df <- bind_rows(combined_df, temp_df)
+    }
+    i <- i + 1
+  }
+}
+```
+
+
+```{r, echo=FALSE, results='hide', warning=FALSE, error=FALSE, message=FALSE}
+bias_df <- combined_df %>% 
+  group_by(
+      `DGP Number`, `Sample Size`, `Number of Variables`, 
+      `Noise to Signal Ratio`, `Number of Propensity Submodels`,
+      `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`) %>%
+  summarise(
+      `True ATE` = mean(`True ATE`), `XBCF` = mean(`ATE (XBCF)`), 
+      `Multiple Propensity XBCF` = mean(`ATE (Multiple Propensity XBCF)`), 
+      `GRF` = mean(`ATE (GRF)`), 
+      `DR-Learner` = mean(`ATE (DR-Learner)`), 
+      `S-Learner` = mean(`ATE (S-Learner)`), 
+      `T-Learner` = mean(`ATE (T-Learner)`), 
+      `X-Learner` = mean(`ATE (X-Learner)`)) %>% 
+  mutate(
+      `XBCF Bias` = `XBCF` - `True ATE`, 
+      `Multiple Propensity XBCF Bias` = `Multiple Propensity XBCF` - `True ATE`, 
+      `GRF Bias` = `GRF` - `True ATE`, 
+      `DR-Learner Bias` = `DR-Learner` - `True ATE`, 
+      `S-Learner Bias` = `S-Learner` - `True ATE`, 
+      `T-Learner Bias` = `T-Learner` - `True ATE`, 
+      `X-Learner Bias` = `X-Learner` - `True ATE`) %>% 
+  select(
+      `DGP Number`, `Sample Size`, `Number of Variables`, 
+      `Noise to Signal Ratio`, `Number of Propensity Submodels`, 
+      `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`, 
+      `XBCF Bias`, `Multiple Propensity XBCF Bias`, `GRF Bias`, 
+      `DR-Learner Bias`, `S-Learner Bias`, `T-Learner Bias`, `X-Learner Bias`)
+```
+
+```{r, echo=FALSE, results='hide', warning=FALSE, error=FALSE, message=FALSE}
+var_df <- combined_df %>% 
+  group_by(
+      `DGP Number`, `Sample Size`, `Number of Variables`, 
+      `Noise to Signal Ratio`, `Number of Propensity Submodels`,
+      `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`) %>%
+  summarise(
+      `True ATE` = mean(`True ATE`), `XBCF` = var(`ATE (XBCF)`), 
+      `Multiple Propensity XBCF` = var(`ATE (Multiple Propensity XBCF)`), 
+      `GRF` = var(`ATE (GRF)`), 
+      `DR-Learner` = var(`ATE (DR-Learner)`), 
+      `S-Learner` = var(`ATE (S-Learner)`), 
+      `T-Learner` = var(`ATE (T-Learner)`), 
+      `X-Learner` = var(`ATE (X-Learner)`)) %>% 
+  mutate(
+      `XBCF Var` = `XBCF`, 
+      `Multiple Propensity XBCF Var` = `Multiple Propensity XBCF`, 
+      `GRF Var` = `GRF`, 
+      `DR-Learner Var` = `DR-Learner`, 
+      `S-Learner Var` = `S-Learner`, 
+      `T-Learner Var` = `T-Learner`, 
+      `X-Learner Var` = `X-Learner`) %>% 
+  select(
+      `DGP Number`, `Sample Size`, `Number of Variables`, 
+      `Noise to Signal Ratio`, `Number of Propensity Submodels`, 
+      `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`, 
+      `XBCF Var`, `Multiple Propensity XBCF Var`, `GRF Var`, 
+      `DR-Learner Var`, `S-Learner Var`, `T-Learner Var`, `X-Learner Var`)
+```
+
+```{r, echo=FALSE, results='hide', warning=FALSE, error=FALSE, message=FALSE}
+rmse_df <- bias_df %>% 
+  mutate(
+      `XBCF Bias Sq` = (`XBCF Bias`)^2, 
+      `Multiple Propensity XBCF Bias Sq` = (`Multiple Propensity XBCF Bias`)^2, 
+      `GRF Bias Sq` = (`GRF Bias`)^2, 
+      `DR-Learner Bias Sq` = (`DR-Learner Bias`)^2, 
+      `S-Learner Bias Sq` = (`S-Learner Bias`)^2, 
+      `T-Learner Bias Sq` = (`T-Learner Bias`)^2, 
+      `X-Learner Bias Sq` = (`X-Learner Bias`)^2) %>% 
+  select(
+      `DGP Number`, `Sample Size`, `Number of Variables`, 
+      `Noise to Signal Ratio`, `Number of Propensity Submodels`, 
+      `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`, 
+      `XBCF Bias Sq`, `Multiple Propensity XBCF Bias Sq`, 
+      `GRF Bias Sq`, `DR-Learner Bias Sq`, `S-Learner Bias Sq`, 
+      `T-Learner Bias Sq`, `X-Learner Bias Sq`) %>% 
+  inner_join(var_df) %>% 
+  mutate(
+      `XBCF RMSE` = sqrt(`XBCF Bias Sq` + `XBCF Var`), 
+      `Multiple Propensity XBCF RMSE` = sqrt(`Multiple Propensity XBCF Bias Sq` + `Multiple Propensity XBCF Var`), 
+      `GRF RMSE` = sqrt(`GRF Bias Sq` + `GRF Var`), 
+      `DR-Learner RMSE` = sqrt(`DR-Learner Bias Sq` + `DR-Learner Var`), 
+      `S-Learner RMSE` = sqrt(`S-Learner Bias Sq` + `S-Learner Var`), 
+      `T-Learner RMSE` = sqrt(`T-Learner Bias Sq` + `T-Learner Var`), 
+      `X-Learner RMSE` = sqrt(`X-Learner Bias Sq` + `X-Learner Var`)) %>% 
+  select(`DGP Number`, `Sample Size`, `Number of Variables`, 
+         `Noise to Signal Ratio`, `Number of Propensity Submodels`, 
+         `Estimated Propensities`, `Residualized XBCF`, `Project Pi Yhat`, 
+         `XBCF RMSE`, `Multiple Propensity XBCF RMSE`, `GRF RMSE`, 
+         `DR-Learner RMSE`, `S-Learner RMSE`, `T-Learner RMSE`, `X-Learner RMSE`)
+```
+
+# RMSE Results
+
+There are way too many runs from most of these experiments to be meaningfully 
+"browsable" in a giant table of RMSE results, so we'll instead curate some 
+side-by-side comparisons.
+
+## Known propensities, no $\pi(\hat{y})$ projection, no residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+rmse_vis_df <- rmse_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF RMSE`, 
+        `Multiple Propensity XBCF RMSE`, `GRF RMSE`, 
+        `DR-Learner RMSE`, `S-Learner RMSE`, `T-Learner RMSE`, `X-Learner RMSE`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(rmse_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, no residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+rmse_vis_df <- rmse_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF RMSE`, 
+        `Multiple Propensity XBCF RMSE`, `GRF RMSE`, 
+        `DR-Learner RMSE`, `S-Learner RMSE`, `T-Learner RMSE`, `X-Learner RMSE`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(rmse_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Known propensities, no $\pi(\hat{y})$ projection, residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+rmse_vis_df <- rmse_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF RMSE`, 
+        `Multiple Propensity XBCF RMSE`, `GRF RMSE`, 
+        `DR-Learner RMSE`, `S-Learner RMSE`, `T-Learner RMSE`, `X-Learner RMSE`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(rmse_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+rmse_vis_df <- rmse_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF RMSE`, 
+        `Multiple Propensity XBCF RMSE`, `GRF RMSE`, 
+        `DR-Learner RMSE`, `S-Learner RMSE`, `T-Learner RMSE`, `X-Learner RMSE`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(rmse_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+# Bias Results
+
+Let's look at the same tables as above but focusing on bias rather than RMSE
+
+## Known propensities, no $\pi(\hat{y})$ projection, no residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+bias_vis_df <- bias_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Bias`, 
+        `Multiple Propensity XBCF Bias`, `GRF Bias`, 
+        `DR-Learner Bias`, `S-Learner Bias`, `T-Learner Bias`, `X-Learner Bias`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(bias_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, no residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+bias_vis_df <- bias_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Bias`, 
+        `Multiple Propensity XBCF Bias`, `GRF Bias`, 
+        `DR-Learner Bias`, `S-Learner Bias`, `T-Learner Bias`, `X-Learner Bias`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(bias_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Known propensities, no $\pi(\hat{y})$ projection, residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+bias_vis_df <- bias_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Bias`, 
+        `Multiple Propensity XBCF Bias`, `GRF Bias`, 
+        `DR-Learner Bias`, `S-Learner Bias`, `T-Learner Bias`, `X-Learner Bias`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(bias_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+bias_vis_df <- bias_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Bias`, 
+        `Multiple Propensity XBCF Bias`, `GRF Bias`, 
+        `DR-Learner Bias`, `S-Learner Bias`, `T-Learner Bias`, `X-Learner Bias`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(bias_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+# Variance Results
+
+Let's look at the same tables as above but focusing on variance
+
+## Known propensities, no $\pi(\hat{y})$ projection, no residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+var_vis_df <- var_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Var`, 
+        `Multiple Propensity XBCF Var`, `GRF Var`, 
+        `DR-Learner Var`, `S-Learner Var`, `T-Learner Var`, `X-Learner Var`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(var_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, no residualization, no $\hat{y}$ XBCF as covariates
+
+```{r, echo=F}
+var_vis_df <- var_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 0)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Var`, 
+        `Multiple Propensity XBCF Var`, `GRF Var`, 
+        `DR-Learner Var`, `S-Learner Var`, `T-Learner Var`, `X-Learner Var`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(var_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Known propensities, no $\pi(\hat{y})$ projection, residualization, $\hat{y}$ as XBCF covariates
+
+```{r, echo=F}
+var_vis_df <- var_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==0) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Var`, 
+        `Multiple Propensity XBCF Var`, `GRF Var`, 
+        `DR-Learner Var`, `S-Learner Var`, `T-Learner Var`, `X-Learner Var`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(var_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
+## Estimated propensities, no $\pi(\hat{y})$ projection, residualization, no $\hat{y}$ XBCF as covariates
+
+```{r, echo=F}
+var_vis_df <- var_df %>% 
+    ungroup() %>%  
+    filter((`Estimated Propensities`==1) & (`Project Pi Yhat`==0) & (`Residualized XBCF` == 1)) %>% 
+    select(
+        `DGP Number`, `Sample Size`, `Number of Variables`, 
+        `Noise to Signal Ratio`, `XBCF Var`, 
+        `Multiple Propensity XBCF Var`, `GRF Var`, 
+        `DR-Learner Var`, `S-Learner Var`, `T-Learner Var`, `X-Learner Var`) %>%
+    arrange(`DGP Number`, `Number of Variables`, `Noise to Signal Ratio`)
+knitr::kable(var_vis_df, col.names = c(
+    "DGP", "$n$", "$p$", "$\\kappa$", 
+    "XBCF", "XBCF-MP", "GRF", "DR-Learner", "S-Learner", 
+    "T-Learner", "X-Learner"), 
+    align = "c", digits = 2)
+```
+
